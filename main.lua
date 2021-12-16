@@ -6,152 +6,100 @@ main.lua
 Simplify importing audio tracks from Digitakt/Digitone or other 8 track machines.
 --]]
 
---==============================================================================
+---------------------------------------------------------------------------------------------------
+-- Require files (app+libraries)
+---------------------------------------------------------------------------------------------------
 
---_trace_filters = nil
-_trace_filters = {".*"}
+-- where to find the vLib/cLib classes (required)
+_clibroot = 'source/cLib/classes/'
+_vlibroot = 'source/vLib/classes/'
 
-_clibroot = "source/cLib/classes/"
-_vlibroot = "source/vLib/classes/"
+-- debug/trace filters can be configured here
+-- (see cDebug for more details)
+--_trace_filters = nil  -- no tracing
+_trace_filters = {".*"} -- trace everything
 
-require (_clibroot.."cLib")
-require (_clibroot.."cDebug")
-require (_clibroot.."cString")
-require (_clibroot.."cColor")
-require (_clibroot.."cValue")
+require (_clibroot..'cLib')
+require (_clibroot..'cDebug')
 
-require (_vlibroot.."vLib")
-require (_vlibroot.."helpers/vSelection")
-require (_vlibroot.."parsers/vXML")
-require (_vlibroot.."vArrowButton")
-require (_vlibroot.."vButton")
-require (_vlibroot.."vButtonStrip")
-require (_vlibroot.."vDialog")
-require (_vlibroot.."vEditField")
-require (_vlibroot.."vTextField")
-require (_vlibroot.."vSearchField")
-require (_vlibroot.."vFileBrowser")
-require (_vlibroot.."vGraph")
-require (_vlibroot.."vLogView")
-require (_vlibroot.."vPathSelector")
-require (_vlibroot.."vPopup")
-require (_vlibroot.."vTable")
-require (_vlibroot.."vTabs")
-require (_vlibroot.."vToggleButton")
-require (_vlibroot.."vTree")
+cLib.require (_vlibroot..'vLib')
+cLib.require (_vlibroot..'vDialog')
+cLib.require (_vlibroot..'vTable')
+cLib.require (_vlibroot.."vFileBrowser")
+cLib.require (_vlibroot.."vButton")
 
---------------------------------------------------------------------------------
--- variables etc.
---------------------------------------------------------------------------------
+require ('source/Octa_UI')
+require ('source/Octa_Prefs')
+
+---------------------------------------------------------------------------------------------------
+-- Variables
+---------------------------------------------------------------------------------------------------
+
+-- this string is assigned as the dialog title
+APP_DISPLAY_NAME = "Octa"
+
+-- reference to the vDialog that contains the application UI
+-- (you don't _have_ to use vDialog, but it's convenient as it
+-- makes it easy to create a dialog that will display when the
+-- Renoise is launched)
+local vdialog
+
+-- implementing preferences as a class only has benefits
+-- (you can still use renoise.tool().preferences from anywhere...)
+local prefs = Octa_Prefs()
+renoise.tool().preferences = prefs
+
+-- vLib requires a global reference to renoise.song(),
+-- the variable is set when show() is called
+rns = nil
 
 
-local vb = renoise.ViewBuilder()
-local dialog,dialog_content
 
---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+-- Menu entries & MIDI/Key mappings
+---------------------------------------------------------------------------------------------------
 
-local function start()
-  TRACE("start()")
-
-  if not dialog or not dialog.visible then
-    if not dialog_content then
-      dialog_content = build()
+renoise.tool():add_menu_entry {
+  name = "Main Menu:Tools:"..APP_DISPLAY_NAME.."...",
+  invoke = function()
+    show()
+  end
+}
+renoise.tool():add_keybinding {
+  name = "Global:"..APP_DISPLAY_NAME..":Show dialog...",
+  invoke = function(repeated)
+    if (not repeated) then
+      show()
     end
+  end
+}
 
-    local function keyhandler(dialog, key)
-      --print("key",rprint(key))
-    end
+---------------------------------------------------------------------------------------------------
+-- Show the application UI ---------------------------------------------------------------------------------------------------
 
-    dialog = renoise.app():show_custom_dialog("Octa",
-            dialog_content, keyhandler)
+function show()
 
-  else
-    dialog:show()
+  -- set global reference to the renoise song
+  rns = renoise.song()
+
+  -- create dialog if it doesn't exist
+  if not vdialog then
+    vdialog = Octa_UI{
+      dialog_title = APP_DISPLAY_NAME,
+      waiting_to_show_dialog = prefs.autostart.value,
+    }
   end
 
-end
-
---------------------------------------------------------------------------------
--- build user interface
---------------------------------------------------------------------------------
-
-function build()
-  TRACE("build()")
-
-  -- skeleton
-  local content = vb:row{
-    margin = 6,
-    spacing = 4,
-    vb:column{
-      vb:row{
-        spacing = 4,
-        vb:column{
-          style = "panel",
-          vb:text{
-            text = "Select widget",
-            font = "bold",
-          },
-          vb:chooser{
-            id = "control_chooser",
-            notifier = function(idx)
-              prefs.active_ctrl_idx.value = idx
-            end
-          },
-        },
-        vb:column{
-          id = "basic_row",
-        },
-      },
-      vb:column{
-        vb:row{
-          vb:space{
-            width = 6,
-          },
-          vb:button{
-            id = "ruler_width",
-            color = {0x00,0xFF,0xFF},
-            height = 6,
-          },
-        },
-        vb:row{
-          vb:button{
-            id = "ruler_height",
-            color = {0x00,0xFF,0xFF},
-            width = 6,
-          },
-          vb:column{
-            id = "controls_col",
-            spacing = 6,
-            -- controls goes here
-          },
-        },
-      },
-    },
-    vb:column{
-      id = "props_row",
-      -- control properties
-    }
-  }
-  return content
+  vdialog:show()
 
 end
 
---------------------------------------------------------------------------------
--- menu entries
---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+-- Notifications
 
-renoise.tool():add_menu_entry{
-  name = "Main Menu:Tools:Octa",
-  invoke = start
-}
+renoise.tool().app_new_document_observable:add_notifier(function()
+  if prefs.autostart.value then
+    show()
+  end
 
---------------------------------------------------------------------------------
--- keybindings
---------------------------------------------------------------------------------
-
-renoise.tool():add_keybinding{
-  name = "Global:Tools:Octa",
-  invoke = start
-}
-
-TRACE("Loaded")
+end)
